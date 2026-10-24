@@ -54,7 +54,16 @@ python recognize.py
 
 Leave the venv with `deactivate`.
 
-Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer 3.12 if 3.14 gives you install errors. A short venv walkthrough is on [W3Schools](https://www.w3schools.com/python/python_virtualenv.asp). MediaPipe's hand guide is [here](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/python).
+Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer 3.12 if 3.14 gives you install errors.
+
+Guides if you are new to Python:
+
+- [The Python tutorial](https://docs.python.org/3/tutorial/) on python.org
+- [Virtual environments](https://docs.python.org/3/library/venv.html) in the official docs
+- [Python tutorial on W3Schools](https://www.w3schools.com/python/)
+- [Python programming language on GeeksforGeeks](https://www.geeksforgeeks.org/python/python-programming-language-tutorial/)
+- [pip on GeeksforGeeks](https://www.geeksforgeeks.org/python/how-to-install-pip-on-windows/)
+- [MediaPipe hand landmarks](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/python)
 
 ## Run
 
