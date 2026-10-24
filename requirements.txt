@@ -1,0 +1,4 @@
+opencv-python>=4.8,<5
+mediapipe>=0.10.30
+numpy>=1.26
+pyttsx3>=2.90
