@@ -1,88 +1,156 @@
-"""Pose labels from MediaPipe hand landmarks.
+"""Live gesture -> text.
 
-Each finger is marked up or down from joint geometry, not from a network.
-A word is returned only when the up/down pattern matches one pose exactly.
-Anything in between returns "" so two gestures are not swapped.
+Finger up/down is measured from the hand landmarks. A word is added only when
+the pattern matches one pose exactly, for several frames in a row.
+
+    pip install -r requirements.txt
+    python recognize.py
+
+Keys: q quit, c clear, space insert the current word, s toggle speech (starts off).
 """
+from __future__ import annotations
+
+import argparse
+from collections import deque
+from pathlib import Path
+
+import cv2
+import mediapipe as mp
 import numpy as np
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
-CHAINS = {
-    "thumb": (1, 2, 3, 4),
-    "index": (5, 6, 7, 8),
-    "middle": (9, 10, 11, 12),
-    "ring": (13, 14, 15, 16),
-    "pinky": (17, 18, 19, 20),
+from features import classify_pose
+from speech import SpeechOutput
+
+GESTURE_TEXT = {
+    "open": "hello",
+    "high": "high",
+    "four": "four",
+    "three": "three",
+    "aim": "aim",
+    "peace": "peace",
+    "love": "love",
+    "letter_l": "L",
+    "rock": "rock",
+    "point": "pointing",
+    "yo": "yo",
+    "thumbs_up": "ok",
+    "pinky": "washroom",
+    "fist": "fist",
+    "nice": "nice",
 }
 
-POSES = {
-    "open": {"thumb": 1, "index": 1, "middle": 1, "ring": 1, "pinky": 1},
-    "high": {"thumb": 1, "index": 1, "middle": 1, "ring": 1, "pinky": 0},
-    "four": {"thumb": 0, "index": 1, "middle": 1, "ring": 1, "pinky": 1},
-    "three": {"thumb": 0, "index": 1, "middle": 1, "ring": 1, "pinky": 0},
-    "aim": {"thumb": 1, "index": 1, "middle": 1, "ring": 0, "pinky": 0},
-    "peace": {"thumb": 0, "index": 1, "middle": 1, "ring": 0, "pinky": 0},
-    "love": {"thumb": 1, "index": 1, "middle": 0, "ring": 0, "pinky": 1},
-    "letter_l": {"thumb": 1, "index": 1, "middle": 0, "ring": 0, "pinky": 0},
-    "rock": {"thumb": 0, "index": 1, "middle": 0, "ring": 0, "pinky": 1},
-    "point": {"thumb": 0, "index": 1, "middle": 0, "ring": 0, "pinky": 0},
-    "yo": {"thumb": 1, "index": 0, "middle": 0, "ring": 0, "pinky": 1},
-    "thumbs_up": {"thumb": 1, "index": 0, "middle": 0, "ring": 0, "pinky": 0},
-    "pinky": {"thumb": 0, "index": 0, "middle": 0, "ring": 0, "pinky": 1},
-    "fist": {"thumb": 0, "index": 0, "middle": 0, "ring": 0, "pinky": 0},
-}
+HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    (0, 5), (5, 6), (6, 7), (7, 8),
+    (0, 9), (9, 10), (10, 11), (11, 12),
+    (0, 13), (13, 14), (14, 15), (15, 16),
+    (0, 17), (17, 18), (18, 19), (19, 20),
+    (5, 9), (9, 13), (13, 17),
+)
 
 
-def _cos(u, v) -> float:
-    return float(np.dot(u, v) / ((np.linalg.norm(u) + 1e-6) * (np.linalg.norm(v) + 1e-6)))
+def draw_hand(frame, landmarks):
+    h, w = frame.shape[:2]
+    pts = [(int(p.x * w), int(p.y * h)) for p in landmarks]
+    for a, b in HAND_CONNECTIONS:
+        cv2.line(frame, pts[a], pts[b], (80, 200, 120), 2, cv2.LINE_AA)
+    for x, y in pts:
+        cv2.circle(frame, (x, y), 3, (240, 240, 240), -1, cv2.LINE_AA)
 
 
-def _hand_frame(lm_xy):
-    pts = np.asarray(lm_xy, dtype=np.float64).reshape(21, 2)
-    rel = pts - pts[0]
-    rel[:, 1] *= -1.0
-    scale = float(np.linalg.norm(rel[9])) + 1e-6
-    return rel / scale
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--task", default="hand_landmarker.task")
+    ap.add_argument("--camera", type=int, default=0)
+    ap.add_argument("--stable", type=int, default=10)
+    args = ap.parse_args()
+
+    task_path = Path(args.task)
+    if not task_path.is_file():
+        raise SystemExit(f"Missing {task_path}. Keep hand_landmarker.task next to this script.")
+
+    options = vision.HandLandmarkerOptions(
+        base_options=python.BaseOptions(model_asset_path=str(task_path)),
+        running_mode=vision.RunningMode.VIDEO,
+        num_hands=1,
+        min_hand_detection_confidence=0.7,
+        min_hand_presence_confidence=0.6,
+        min_tracking_confidence=0.6,
+    )
+    landmarker = vision.HandLandmarker.create_from_options(options)
+
+    cap = cv2.VideoCapture(args.camera)
+    if not cap.isOpened():
+        raise SystemExit(f"Could not open camera {args.camera}")
+
+    recent = deque(maxlen=args.stable)
+    sentence = []
+    last_word = None
+    timestamp_ms = 0
+
+    speech = SpeechOutput()
+    try:
+        while True:
+            speech.poll()
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frame = cv2.flip(frame, 1)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
+            timestamp_ms += 33
+            result = landmarker.detect_for_video(mp_image, timestamp_ms)
+
+            label = ""
+            if result.hand_landmarks:
+                lm = result.hand_landmarks[0]
+                draw_hand(frame, lm)
+                pts = np.array([(p.x, p.y) for p in lm], dtype=np.float64)
+                label = classify_pose(pts)
+                if label:
+                    recent.append(label)
+                else:
+                    recent.clear()
+            else:
+                recent.clear()
+
+            if len(recent) == args.stable and len(set(recent)) == 1:
+                word = GESTURE_TEXT.get(recent[-1], recent[-1])
+                if word != last_word:
+                    sentence.append(word)
+                    speech.say(word)
+                    last_word = word
+            if not label:
+                last_word = None
+
+            shown = " ".join(sentence[-12:])
+            cv2.rectangle(frame, (0, 0), (frame.shape[1], 100), (20, 20, 20), -1)
+            cv2.putText(frame, shown or "(show a hand)", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (240, 240, 240), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"pose: {label or '-'}", (12, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 220, 180), 1, cv2.LINE_AA)
+            status = "ERROR (see terminal)" if speech.error else ("ON" if speech.enabled else "OFF")
+            cv2.putText(frame, f"Speech: {status} | S: toggle", (12, 88), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 220, 180), 1, cv2.LINE_AA)
+            cv2.imshow("gesture to text", frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                break
+            if key == ord("s"):
+                speech.toggle()
+            if key == ord("c"):
+                sentence.clear()
+                last_word = None
+            if key == ord(" ") and label:
+                word = GESTURE_TEXT.get(label, label)
+                sentence.append(word)
+                speech.say(word)
+
+    finally:
+        speech.close()
+        cap.release()
+        cv2.destroyAllWindows()
+        landmarker.close()
 
 
-def finger_score(rel, name: str) -> float:
-    """0 is curled in, 1 is fully extended. Values in between are unsure."""
-    mcp, pip, dip, tip = CHAINS[name]
-    bones = (rel[pip] - rel[mcp], rel[dip] - rel[pip], rel[tip] - rel[dip])
-    straight = 0.5 * (_cos(bones[0], bones[1]) + _cos(bones[1], bones[2]))
-    straight_n = float(np.clip((straight + 0.2) / 1.2, 0.0, 1.0))
-    tip_reach = float(np.linalg.norm(rel[tip]))
-    pip_reach = float(np.linalg.norm(rel[pip]))
-    if name == "thumb":
-        side = float(np.linalg.norm(rel[4] - rel[5]))
-        side_n = float(np.clip((side - 0.25) / 0.7, 0.0, 1.0))
-        reach_n = float(np.clip((tip_reach - 0.35) / 0.9, 0.0, 1.0))
-        return 0.4 * straight_n + 0.35 * side_n + 0.25 * reach_n
-    reach_n = float(np.clip((tip_reach - pip_reach) / 0.9, 0.0, 1.0))
-    long_n = float(np.clip((tip_reach - 0.9) / 1.1, 0.0, 1.0))
-    return 0.45 * straight_n + 0.35 * reach_n + 0.2 * long_n
-
-
-def classify_pose(lm_xy) -> str:
-    rel = _hand_frame(lm_xy)
-    scores = {name: finger_score(rel, name) for name in CHAINS}
-    pinch = float(np.linalg.norm(rel[4] - rel[8]))
-    if (
-        pinch < 0.5
-        and scores["middle"] > 0.62
-        and scores["ring"] > 0.62
-        and scores["pinky"] > 0.62
-        and scores["index"] < 0.45
-    ):
-        return "nice"
-    state = {}
-    for name, score in scores.items():
-        if score >= 0.64:
-            state[name] = 1
-        elif score <= 0.36:
-            state[name] = 0
-        else:
-            return ""
-    for pose, pattern in POSES.items():
-        if state == pattern:
-            return pose
-    return ""
+if __name__ == "__main__":
+    main()
