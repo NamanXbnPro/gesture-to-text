@@ -6,14 +6,13 @@ the pattern matches one pose exactly, for several frames in a row.
     pip install -r requirements.txt
     python recognize.py
 
-Keys: q quit, c clear, space insert the current word, t toggles speech.
+Keys: q quit, c clear, space insert the current word, s toggle speech (starts off).
 """
 from __future__ import annotations
 
 import argparse
 from collections import deque
 from pathlib import Path
-import threading
 
 import cv2
 import mediapipe as mp
@@ -22,6 +21,7 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 from features import classify_pose
+from speech import SpeechOutput
 
 GESTURE_TEXT = {
     "open": "hello",
@@ -51,18 +51,6 @@ HAND_CONNECTIONS = (
 )
 
 
-def speak(text: str) -> None:
-    def _run():
-        try:
-            import pyttsx3
-            engine = pyttsx3.init()
-            engine.say(text)
-            engine.runAndWait()
-        except Exception:
-            pass
-    threading.Thread(target=_run, daemon=True).start()
-
-
 def draw_hand(frame, landmarks):
     h, w = frame.shape[:2]
     pts = [(int(p.x * w), int(p.y * h)) for p in landmarks]
@@ -76,15 +64,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", default="hand_landmarker.task")
     ap.add_argument("--camera", type=int, default=0)
-    ap.add_argument("--stable", type=int, default=8)
+    ap.add_argument("--stable", type=int, default=10)
     args = ap.parse_args()
 
     task_path = Path(args.task)
     if not task_path.is_file():
-        import urllib.request
-        url = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
-        print(f"Downloading {task_path.name} ...")
-        urllib.request.urlretrieve(url, task_path)
+        raise SystemExit(f"Missing {task_path}. Keep hand_landmarker.task next to this script.")
 
     options = vision.HandLandmarkerOptions(
         base_options=python.BaseOptions(model_asset_path=str(task_path)),
@@ -104,66 +89,67 @@ def main():
     sentence = []
     last_word = None
     timestamp_ms = 0
-    speech_on = False
-    smooth = None
 
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
-        frame = cv2.flip(frame, 1)
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
-        timestamp_ms += 33
-        result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    speech = SpeechOutput()
+    try:
+        while True:
+            speech.poll()
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frame = cv2.flip(frame, 1)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
+            timestamp_ms += 33
+            result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-        label = ""
-        if result.hand_landmarks:
-            lm = result.hand_landmarks[0]
-            draw_hand(frame, lm)
-            pts = np.array([(p.x, p.y, p.z) for p in lm], dtype=np.float64)
-            smooth = pts if smooth is None else 0.55 * smooth + 0.45 * pts
-            label = classify_pose(smooth[:, :2])
-            if label:
-                recent.append(label)
+            label = ""
+            if result.hand_landmarks:
+                lm = result.hand_landmarks[0]
+                draw_hand(frame, lm)
+                pts = np.array([(p.x, p.y) for p in lm], dtype=np.float64)
+                label = classify_pose(pts)
+                if label:
+                    recent.append(label)
+                else:
+                    recent.clear()
             else:
                 recent.clear()
-        else:
-            recent.clear()
-            smooth = None
 
-        if len(recent) == args.stable and len(set(recent)) == 1:
-            word = GESTURE_TEXT.get(recent[-1], recent[-1])
-            if word != last_word:
+            if len(recent) == args.stable and len(set(recent)) == 1:
+                word = GESTURE_TEXT.get(recent[-1], recent[-1])
+                if word != last_word:
+                    sentence.append(word)
+                    speech.say(word)
+                    last_word = word
+            if not label:
+                last_word = None
+
+            shown = " ".join(sentence[-12:])
+            cv2.rectangle(frame, (0, 0), (frame.shape[1], 100), (20, 20, 20), -1)
+            cv2.putText(frame, shown or "(show a hand)", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (240, 240, 240), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"pose: {label or '-'}", (12, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 220, 180), 1, cv2.LINE_AA)
+            status = "ERROR (see terminal)" if speech.error else ("ON" if speech.enabled else "OFF")
+            cv2.putText(frame, f"Speech: {status} | S: toggle", (12, 88), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 220, 180), 1, cv2.LINE_AA)
+            cv2.imshow("gesture to text", frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                break
+            if key == ord("s"):
+                speech.toggle()
+            if key == ord("c"):
+                sentence.clear()
+                last_word = None
+            if key == ord(" ") and label:
+                word = GESTURE_TEXT.get(label, label)
                 sentence.append(word)
-                last_word = word
-                if speech_on:
-                    speak(word)
-        if not label:
-            last_word = None
+                speech.say(word)
 
-        shown = " ".join(sentence[-12:])
-        cv2.rectangle(frame, (0, 0), (frame.shape[1], 72), (20, 20, 20), -1)
-        cv2.putText(frame, shown or "(show a hand)", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (240, 240, 240), 2, cv2.LINE_AA)
-        cv2.putText(frame, f"pose: {label or '-'}   speech: {'on' if speech_on else 'off'} (t)", (12, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 220, 180), 1, cv2.LINE_AA)
-        cv2.imshow("gesture to text", frame)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("q"):
-            break
-        if key == ord("c"):
-            sentence.clear()
-            last_word = None
-        if key == ord("t"):
-            speech_on = not speech_on
-        if key == ord(" ") and label:
-            word = GESTURE_TEXT.get(label, label)
-            sentence.append(word)
-            if speech_on:
-                speak(word)
-
-    cap.release()
-    cv2.destroyAllWindows()
-    landmarker.close()
+    finally:
+        speech.close()
+        cap.release()
+        cv2.destroyAllWindows()
+        landmarker.close()
 
 
 if __name__ == "__main__":
