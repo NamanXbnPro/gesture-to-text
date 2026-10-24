@@ -1,4 +1,4 @@
-# Gesture to text
+# Gesture to text using python and trained models
 
 Webcam hand poses are turned into words. One hand, 15 static poses. A word is added only when the fingers match one row exactly. A half-pose is ignored instead of being called the wrong word.
 
