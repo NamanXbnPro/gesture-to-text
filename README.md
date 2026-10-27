@@ -62,7 +62,7 @@ Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer
 python recognize.py
 ```
 
-Wrong camera: `python recognize.py --camera 1`.
+For Wrong camera, run: `python recognize.py --camera 1`.
 
 ## Controls
 
