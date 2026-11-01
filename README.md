@@ -1,6 +1,10 @@
 # Gesture to text
 
-Webcam hand poses are turned into words. One hand, 15 static poses. A word is added only when the fingers match one row exactly. A half-pose is ignored instead of being called the wrong word.
+`python recognize.py` opens the camera window and a local page at http://127.0.0.1:8000. Hand 1 and Hand 2 each keep a colour. The page lists a text box and a speech switch for each. Speech stays off until you turn that hand's switch on. Press Q in the camera window to quit.
+
+One-hand version: [gesture-to-text-lite](https://github.com/NamanXbnPro/gesture-to-text-lite)
+
+Webcam hand poses are turned into words. Up to two hands. A word is shown only when the fingers match one row exactly.
 
 | Pose | Fingers up | Word |
 |---|---|---|
@@ -27,7 +31,7 @@ Use a venv so these packages stay separate from the rest of Python.
 **Windows (PowerShell)**
 
 ```powershell
-cd C:\Users\Naman\Documents\gesture-to-text
+cd gesture-to-text
 py -3.12 -m venv env
 .\env\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -54,7 +58,15 @@ python recognize.py
 
 Leave the venv with `deactivate`.
 
-Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer 3.12 if 3.14 gives you install errors. A short venv walkthrough is on [W3Schools](https://www.w3schools.com/python/python_virtualenv.asp). MediaPipe's hand guide is [here](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/python).
+Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer 3.12 if 3.14 gives you install errors.
+
+Guides if you are new to Python:
+
+- [The Python tutorial](https://docs.python.org/3/tutorial/) on python.org
+- [Virtual environments](https://docs.python.org/3/library/venv.html) in the official docs
+- [Python tutorial on W3Schools](https://www.w3schools.com/python/)
+- [Python programming language on GeeksforGeeks](https://www.geeksforgeeks.org/python/python-programming-language-tutorial/)
+- [MediaPipe hand landmarks](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/python)
 
 ## Run
 
@@ -62,31 +74,10 @@ Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer
 python recognize.py
 ```
 
-For Wrong camera, run: `python recognize.py --camera 1`.
+The browser opens http://127.0.0.1:8000. The first run downloads `hand_landmarker.task` if it is not already in the folder. Wrong camera: `python recognize.py --camera 1`.
 
-## Controls
+Press Q in the camera window to quit. Each hand's speech switch is on the web page and starts off.
 
-- Hold the pose still, palm toward the camera, whole hand in frame.
-- `s` toggles speech ON/OFF. Speech starts OFF; the camera window shows its status.
-- `q` quits.
-- `c` clears the sentence.
-- `space` inserts the current pose immediately.
+## License
 
-The on-screen `pose:` line stays `-` until the fingers match one row of the table. Curl the unused fingers all the way in. That is what stops peace being read as hello, or yo being read as thumbs up.
-
-## Files
-
-- `recognize.py` — camera loop.
-- `features.py` — decides which fingers are up, then matches a pose.
-- `hand_landmarker.task` — MediaPipe hand model. Keep it next to `recognize.py`.
-- `requirements.txt` — `opencv-python`, `mediapipe`, `numpy`.
-
-## Optional speech output
-
-Install the updated requirements, run the app, then press **S** with the camera window focused. Accepted words (including Space inserts) are spoken only while speech is ON. Holding the same pose does not repeatedly speak it. Switching ON does not read old sentence text; show a new pose, release and repeat it, or press Space. Switching OFF stops speech and discards queued words.
-
-Speech uses the local system voice through `pyttsx3`; no online speech service is needed. A separate process keeps the camera responsive. At most three words wait behind the current utterance; excess words are skipped if gestures arrive faster than speech.
-
-On Windows, the built-in SAPI5 voice is used. On Linux, install the system speech engine if needed: `sudo apt install espeak-ng libespeak1`. On macOS, if the backend reports a missing bridge, install `pyobjc` in your virtual environment. If speech fails, the camera keeps running, the status shows ERROR, and details appear in the terminal. Press S to retry after fixing the dependency.
-
-`speech.py` manages the optional voice process.
+[MIT](LICENSE). Copyright (c) 2026 Naman.
