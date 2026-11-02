@@ -1,10 +1,10 @@
 # Gesture to text
 
-`python recognize.py` opens the camera window and a local page at http://127.0.0.1:8000. Hand 1 and Hand 2 each keep a colour. The page lists a text box and a speech switch for each. Speech stays off until you turn that hand's switch on. Press Q in the camera window to quit.
+Webcam hand poses are turned into words. Two hands at once. Each hand is named Hand 1 or Hand 2, drawn in its own colour, and listed in a matching text box on the right. A speech slider for that hand sits on the OpenCV window. It starts off. This is the desktop app, not a browser page.
 
 One-hand version: [gesture-to-text-lite](https://github.com/NamanXbnPro/gesture-to-text-lite)
 
-Webcam hand poses are turned into words. Up to two hands. A word is shown only when the fingers match one row exactly.
+A word is shown only when the fingers match one row exactly. A half-pose stays a dash instead of being called the wrong word.
 
 | Pose | Fingers up | Word |
 |---|---|---|
@@ -31,7 +31,7 @@ Use a venv so these packages stay separate from the rest of Python.
 **Windows (PowerShell)**
 
 ```powershell
-cd gesture-to-text
+cd C:\Users\Naman\Documents\gesture-to-text
 py -3.12 -m venv env
 .\env\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -58,15 +58,7 @@ python recognize.py
 
 Leave the venv with `deactivate`.
 
-Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer 3.12 if 3.14 gives you install errors.
-
-Guides if you are new to Python:
-
-- [The Python tutorial](https://docs.python.org/3/tutorial/) on python.org
-- [Virtual environments](https://docs.python.org/3/library/venv.html) in the official docs
-- [Python tutorial on W3Schools](https://www.w3schools.com/python/)
-- [Python programming language on GeeksforGeeks](https://www.geeksforgeeks.org/python/python-programming-language-tutorial/)
-- [MediaPipe hand landmarks](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/python)
+Python itself: [python.org/downloads](https://www.python.org/downloads/). Prefer 3.12 if 3.14 gives you install errors. A short venv walkthrough is on [W3Schools](https://www.w3schools.com/python/python_virtualenv.asp). MediaPipe's hand guide is [here](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker/python).
 
 ## Run
 
@@ -74,10 +66,22 @@ Guides if you are new to Python:
 python recognize.py
 ```
 
-The browser opens http://127.0.0.1:8000. The first run downloads `hand_landmarker.task` if it is not already in the folder. Wrong camera: `python recognize.py --camera 1`.
+Wrong camera: `python recognize.py --camera 1`.
 
-Press Q in the camera window to quit. Each hand's speech switch is on the web page and starts off.
+## Controls
 
-## License
+- Hold the pose still, palm toward the camera, whole hand in frame.
+- The sliders under the camera window are **Hand 1 speech** and **Hand 2 speech**. Drag a slider to the right to speak that hand only. Leave it left to stay silent.
+- `q` quits.
 
-[MIT](LICENSE). Copyright (c) 2026 Naman.
+The text box stays `-` until the fingers match one row of the table. Curl the unused fingers all the way in.
+
+## Files
+
+- `recognize.py` — camera window, hand colours, text boxes, and speech sliders.
+- `speech.py` — speaks a word only when that hand's slider is on.
+- `features.py` — decides which fingers are up, then matches a pose.
+- `hand_landmarker.task` — MediaPipe hand model. Keep it next to `recognize.py`.
+- `requirements.txt` — `opencv-python`, `mediapipe`, `numpy`, `pyttsx3`.
+
+Speech uses the computer's own voice. On Windows that is the built-in voice. No account or internet speech service is required.
