@@ -87,6 +87,13 @@ def compose(frame, cards):
     return canvas
 
 
+def speech_on(name: str) -> bool:
+    try:
+        return cv2.getTrackbarPos(f"{name} speech", WINDOW) == 1
+    except cv2.error:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", default="hand_landmarker.task")
@@ -116,6 +123,8 @@ def main():
         raise SystemExit(f"Could not open camera {args.camera}")
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
+    cv2.imshow(WINDOW, np.zeros((480, 920, 3), np.uint8))
+    cv2.waitKey(1)
     for n in range(1, MAX_HANDS + 1):
         cv2.createTrackbar(f"Hand {n} speech", WINDOW, 0, 1, lambda _v: None)
 
@@ -166,10 +175,7 @@ def main():
                 order = [(b if b < ti else b - 1, index) for b, index in order]
 
             labels = []
-            any_voice = False
-            for n in range(1, MAX_HANDS + 1):
-                if cv2.getTrackbarPos(f"Hand {n} speech", WINDOW):
-                    any_voice = True
+            any_voice = any(speech_on(f"Hand {n}") for n in range(1, MAX_HANDS + 1))
             if any_voice:
                 speech.ensure()
             elif speech.enabled:
@@ -191,7 +197,7 @@ def main():
                 shown = "-"
                 if len(slot) == args.stable and len(set(slot)) == 1:
                     shown = GESTURE_TEXT.get(slot[-1], slot[-1])
-                voice = cv2.getTrackbarPos(f"{name} speech", WINDOW) == 1
+                voice = speech_on(name)
                 if shown != "-" and shown != track["said"] and voice:
                     speech.say(shown)
                     track["said"] = shown
