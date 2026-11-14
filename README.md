@@ -5,6 +5,8 @@ Try it in the browser:
 - Two-hand site: [namanxbnpro.github.io/gesture-to-text](https://namanxbnpro.github.io/gesture-to-text/)
 - One-hand site: [namanxbnpro.github.io/gesture-to-text-lite](https://namanxbnpro.github.io/gesture-to-text-lite/)
 
+Reviews, likes, and comments on those pages are GitHub issues labeled `review`.
+
 The downloadable app is the desktop window below.
 
 Webcam hand poses are turned into words. Two hands at once. Each hand is named Hand 1 or Hand 2, drawn in its own colour, and listed in a matching text box on the right. A speech slider for that hand sits on the OpenCV window. It starts off. This is the desktop app, not a browser page.

@@ -57,6 +57,10 @@ video,#overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:cover
 .dcard .actions{gap:10px}
 pre{background:#0b0f0a;border:1px solid var(--line);border-radius:14px;padding:14px;overflow-x:auto;font-size:.88rem;color:#d9d3c6}
 details{background:var(--panel);border-radius:14px;padding:12px 16px;margin-bottom:10px}summary{cursor:pointer;font-weight:600}details p{margin:8px 0 0;color:var(--mute)}
+.stars{display:flex;gap:6px}.stars button{background:none;border:0;color:#3a4034;font-size:1.6rem;cursor:pointer;padding:0;line-height:1}.stars button.on{color:var(--gold)}
+.revform textarea{width:100%;margin-top:8px;background:#0b0f0a;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit}
+.rev{background:rgba(20,26,18,.45);border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:16px;margin:0 0 12px}
+.rev p{margin:8px 0 12px;white-space:pre-wrap}.rev .meta{display:flex;gap:12px;flex-wrap:wrap;color:var(--mute);font-size:.88rem}
 footer{margin-top:48px;border-top:1px solid var(--line);padding:24px 0 40px;color:var(--mute);font-size:.9rem}
 footer .wrap{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
 footer a{display:inline-flex;align-items:center;gap:8px}
@@ -93,7 +97,7 @@ header{background:rgba(10,13,9,.5);border-bottom:1px solid rgba(255,255,255,.08)
 
 <header><div class="wrap">
   <a class="brand" href="#top">Gesture to Text</a>
-  <nav><a href="#demo">Try it</a><a href="#gestures">Gestures</a><a href="#how">How it works</a><a href="#download">Download</a><a href="#help">Help</a><a href="https://namanxbnpro.github.io/gesture-to-text-lite/">One-hand site</a></nav>
+  <nav><a href="#demo">Try it</a><a href="#gestures">Gestures</a><a href="#how">How it works</a><a href="#download">Download</a><a href="#reviews">Reviews</a><a href="#help">Help</a><a href="https://namanxbnpro.github.io/gesture-to-text-lite/">One-hand site</a></nav>
   <a class="btn ghost" href="https://github.com/NamanXbnPro/gesture-to-text" target="_blank" rel="noopener"><svg class="gh"><use href="#gh"/></svg>GitHub</a>
 </div></header>
 
@@ -154,6 +158,19 @@ header{background:rgba(10,13,9,.5);border-bottom:1px solid rgba(255,255,255,.08)
 source env/bin/activate        # Windows: .\env\Scripts\Activate.ps1
 pip install -r requirements.txt
 python recognize.py</pre>
+  </section>
+
+  <section id="reviews">
+    <h2>Reviews</h2>
+    <p class="lead">Rate the project, like a review, or leave a comment. Posts are public GitHub issues, so the same list shows on the one-hand site. Publishing needs a free GitHub account.</p>
+    <div class="actions" style="margin-bottom:16px"><a class="btn" id="like-project" href="https://github.com/NamanXbnPro/gesture-to-text" target="_blank" rel="noopener">Like the project · <span id="star-count">…</span></a></div>
+    <form class="revform" id="revform">
+      <div class="stars" id="star-pick"></div>
+      <p class="lead" id="star-label">Choose 1 to 5 stars</p>
+      <textarea id="rev-text" rows="4" maxlength="1000" placeholder="What worked, and what did not?" required></textarea>
+      <div class="actions" style="margin-top:12px"><button class="btn" type="submit">Post review</button></div>
+    </form>
+    <div id="rev-list"><p class="lead">Loading reviews…</p></div>
   </section>
 
   <section id="help">
@@ -331,6 +348,48 @@ document.querySelectorAll("section,.hero,.pose,.step,.dcard").forEach((e,i)=>{e.
 const io=new IntersectionObserver(es=>es.forEach(x=>{if(x.isIntersecting){x.target.classList.add("in");io.unobserve(x.target)}}),{threshold:.1});
 document.querySelectorAll(".rv").forEach(e=>io.observe(e));
 void ready;
+</script>
+<script>
+const REPO="NamanXbnPro/gesture-to-text";
+let rating=0;
+const pick=document.getElementById("star-pick");
+for(let i=1;i<=5;i++){
+  const b=document.createElement("button");
+  b.type="button"; b.textContent="★"; b.setAttribute("aria-label", i+" stars");
+  b.onclick=()=>{rating=i;[...pick.children].forEach((el,n)=>el.classList.toggle("on", n<i)); document.getElementById("star-label").textContent=i+" / 5"};
+  pick.appendChild(b);
+}
+document.getElementById("revform").onsubmit=(e)=>{
+  e.preventDefault();
+  if(!rating){document.getElementById("star-label").textContent="Pick 1 to 5 stars first."; return}
+  const text=document.getElementById("rev-text").value.trim();
+  const title="Review: "+rating+"/5";
+  const body="Rating: "+rating+"/5\n\n"+text;
+  const url="https://github.com/"+REPO+"/issues/new?labels=review&title="+encodeURIComponent(title)+"&body="+encodeURIComponent(body);
+  window.open(url,"_blank","noopener");
+};
+const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&","<":"<",">":">",'"':""","'":"&#39;"}[c]));
+const starText=n=>"★★★★★".slice(0,n)+"☆☆☆☆☆".slice(n);
+const ratingOf=issue=>{const m=(issue.body||"").match(/Rating:\s*([1-5])\s*\/\s*5/i)||(issue.title||"").match(/([1-5])\s*\/\s*5/); return m?+m[1]:0};
+async function loadReviews(){
+  const list=document.getElementById("rev-list");
+  try{
+    const [repo, issues]=await Promise.all([
+      fetch("https://api.github.com/repos/"+REPO).then(r=>r.json()),
+      fetch("https://api.github.com/repos/"+REPO+"/issues?labels=review&state=open&per_page=20").then(r=>r.json())
+    ]);
+    document.getElementById("star-count").textContent=(repo.stargazers_count||0)+" stars";
+    const rows=Array.isArray(issues)?issues.filter(i=>!i.pull_request):[];
+    if(!rows.length){list.innerHTML='<p class="lead">No reviews yet. Be the first.</p>'; return}
+    list.innerHTML=rows.map(issue=>{
+      const n=ratingOf(issue);
+      const likes=(issue.reactions&&((issue.reactions.heart||0)+(issue.reactions["+1"]||0)))||0;
+      const body=(issue.body||"").replace(/Rating:\s*[1-5]\s*\/\s*5\s*/i,"").trim();
+      return `<article class="rev"><div class="meta"><span>${esc(starText(n)||"No rating")}</span><a href="${issue.user.html_url}" target="_blank" rel="noopener">${esc(issue.user.login)}</a><span>${new Date(issue.created_at).toLocaleDateString()}</span></div><p>${esc(body||issue.title)}</p><div class="actions"><a class="btn ghost" href="${issue.html_url}" target="_blank" rel="noopener">Like · ${likes}</a><a class="btn ghost" href="${issue.html_url}#issuecomment-new" target="_blank" rel="noopener">Comment · ${issue.comments}</a></div></article>`;
+    }).join("");
+  }catch(err){list.innerHTML='<p class="lead">Reviews could not be loaded. You can still post one on GitHub.</p>'}
+}
+loadReviews();
 </script>
 </body>
 </html>
